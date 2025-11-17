@@ -1,0 +1,8 @@
+[Flatpak Ref]
+Name=com.mcpelauncher.MCPELauncher
+Title=MCPE Launcher
+Description=A Minecraft: Bedrock Edition launcher for Linux
+Url=https://javiercplus.codeberg.page/
+Branch=main
+IsRuntime=false
+SuggestRemoteName=mcpelauncher

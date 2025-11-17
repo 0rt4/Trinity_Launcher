@@ -1,0 +1,24 @@
+PAL FLATPAK DE MCPE
+flatpak install flathub io.qt.qtwebengine.BaseApp//5.15-23.08
+flatpak install flathub org.kde.Platform//5.15-23.08 org.kde.Sdk//5.15-23.08
+
+
+
+
+
+#USER
+flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+# 1. Asegúrate de tener las dependencias
+flatpak install --user flathub org.kde.Platform//5.15-23.08 org.kde.Sdk//5.15-23.08 io.qt.qtwebengine.BaseApp//5.15-23.08
+#construir
+flatpak-builder --user --force-clean build-dir com.mcpelauncher.MCPELauncher.json
+flatpak-builder --repo=repo --force-clean build-dir com.mcpelauncher.MCPELauncher.json
+flatpak build-bundle repo MCPELauncher.flatpak com.mcpelauncher.MCPELauncher
+flatpak install ./MCPELauncher.flatpak
+para iniciar
+flatpak run --file-forwarding com.mcpelauncher.MCPELauncher
+
+# 2. Construye e instala en modo usuario
+flatpak-builder --user --install --force-clean build-dir com.mcpelauncher.MCPELauncher.json
+
+flatpak-builder --user --install --force-clean build-dir com.mcpelauncher.MCPELauncher.json 

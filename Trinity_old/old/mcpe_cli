@@ -1,0 +1,725 @@
+#!/bin/bash
+
+# Script para automatizar la instalación de mcpelauncher y la extracción del APK.
+# Pide la ruta del APK si no se proporciona como argumento.
+# Intenta ejecutar el juego y limpiar los fuentes al final si el usuario lo desea.
+#
+# Uso:
+#   ./install_mcpe_interactive.sh [/ruta/completa/a/tu/minecraft.apk] [version_string]
+#
+# Ejemplos:
+#   ./install_mcpe_interactive.sh ~/Downloads/Minecraft_1.21.72.apk 1.21.72.01
+#   ./install_mcpe_interactive.sh # Preguntará por la ruta del APK
+#   ./install_mcpe_interactive.sh ~/Downloads/Minecraft_1.21.72.apk # Usará versión por defecto
+
+# Salir inmediatamente si un comando falla
+set -e
+
+# Solo permitir con bash
+
+if [ -z "$BASH_VERSION" ]; then
+    echo "Se ha detectado con otro interprete, usando Bash"
+    echo "Reiniciando script con Bash"
+    echo "Listo!"
+    echo ""
+    exec bash "$0" "$@"
+fi
+
+# --- Configuración ---
+
+# Guardar la ruta donde se encuentra el script para encontrar archivos (como el .svg) de forma fiable.
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+# Directorios de código fuente (para limpieza opcional)
+EXTRACTOR_SRC_DIR="mcpelauncher-extract-src"
+LAUNCHER_SRC_DIR="mcpelauncher-src"
+# --- Raiz de la fuente
+
+ROOT_SOURCE="$HOME/sources"
+
+# --- Raiz de la ruta donde iría el acceso directo
+
+ROOT_SHORTCUT="$HOME/.local/share/applications"
+ROOT_SHORTCUT_ICON="$HOME/.local/share/icons/hicolor/scalable/apps"
+
+
+if [ ! -d "$ROOT_SOURCE" ]; then
+    echo "Directorio "$ROOT_SOURCE" inexistente, creando y accediendo"
+    mkdir -p "$ROOT_SOURCE"
+else
+    echo " "$ROOT_SOURCE" ya existe, accediendo"
+fi
+
+cd "$ROOT_SOURCE"
+
+# --- Banderas true/false ---
+EXTRACTOR_INSTALLED=false
+LAUNCHER_INSTALLED=false
+
+# --- Funciones auxiliares ---
+print_step() {
+    echo ""
+    echo "--- [$1/$2] $3 ---"
+}
+
+check_command() {
+    if ! command -v $1 &> /dev/null; then
+        echo "Error: Comando '$1' no encontrado. Por favor, instálalo."
+        exit 1
+    fi
+}
+
+run_as_root() {
+    if [ $(id -u) -ne 0 ]
+    then
+        # Algunos comandos dependen de que el usuario ejecute este script como usuario root. En dichos casos
+        # podemos utilizar herramientas como 'sudo', 'doas' o el más simple (y siempre disponible) 'su'.
+        if command -v sudo &> /dev/null; then
+            echo "Ejecutando 'sudo $@'..."
+            sudo "$@"
+        elif command -v doas &> /dev/null; then
+            echo "Ejecutando 'doas $@'..."
+            doas "$@"
+        else
+            echo "Ejecutando 'su root -c \"$@\"'..."
+
+            # Aquí *tenemos* que expandir "$@" dentro de una variable, para luego volver a expandirla dentro
+            # de doble-comillas. Hacer un 'su -l root -c "$@"' directamente no funcionará.
+            cmd="$@"
+            su root -c "$cmd"
+        fi
+    fi
+}
+
+print_info() {
+    echo "-----------------------------------------------------------------------"
+    echo " Éste script es una alternativa de ejecutar Minecraft Bedrock en Linux"
+    echo " desde consola."
+    echo "-----------------------------------------------------------------------"
+    echo ""
+    echo "-----------------------------------------------------------------------"
+    echo " Si deseas más ayuda sobre el uso de éste script, puedes unirte a"
+    echo " nuestro server de Discord: https://discord.gg/z2syCBMpYU"
+    echo " Nota: Manten pulsado CTRL y luego clic sobre el enlace"
+    echo ""
+    echo " ¡Ahí te ayudaremos con mucho gusto!"
+    echo "-----------------------------------------------------------------------"
+    echo 
+}
+
+check_cpu_instructions() {
+    echo ""
+    echo "--- Verificando compatibilidad de la CPU ---"
+    
+    # Lista de sets de instrucciones requeridos (en minúsculas, como aparecen en /proc/cpuinfo)
+    local required_flags=("ssse3" "sse4_1" "sse4_2" "popcnt")
+    
+    # Obtener los flags de la CPU una sola vez para ser eficientes
+    # Usamos grep -m1 para detener la búsqueda después de la primera línea de 'flags'
+    local cpu_flags
+    cpu_flags=$(grep -m1 '^flags' /proc/cpuinfo)
+
+    local all_flags_present=true
+    
+    # Iterar sobre cada flag requerido
+    for flag in "${required_flags[@]}"; do
+        # Verificar si el flag NO está en la lista de flags de la CPU
+        # Usar '\b' para asegurar que buscamos la palabra completa (evita que 'sse' coincida con 'ssse3')
+        if ! echo "$cpu_flags" | grep -q "\b$flag\b"; then
+            echo "ERROR: Tu CPU no soporta la instrucción requerida: '$flag'."
+            all_flags_present=false
+        fi
+    done
+
+    if [[ "$all_flags_present" == "false" ]]; then
+        echo "----------------------------------------------------------------------"
+        echo " Tu CPU no es compatible con los requisitos mínimos de Minecraft."
+        echo " El script no puede continuar.                                   "
+        echo "----------------------------------------------------------------------"
+        exit 1
+    else
+        echo "CPU compatible. Todos los sets de instrucciones requeridos están presentes."
+    fi
+    echo ""
+}
+
+check_apk_architecture() {
+    local target_dir="$1"
+    echo ""
+    echo "--- Verificando la arquitectura del APK extraído ---"
+    echo ""
+
+    local host_arch
+    host_arch=$(uname -m)
+    
+    local lib_dir="$target_dir/lib"
+
+    if [ ! -d "$lib_dir" ]; then
+        echo "ERROR: No se pudo encontrar el directorio 'lib' en los archivos extraídos. La extracción pudo haber fallado."
+        echo "Limpiando el directorio de extracción fallida: $target_dir"
+        rm -rf "$target_dir"
+        exit 1
+    fi
+
+    # Usamos 'case' para manejar diferentes arquitecturas de sistema
+    case "$host_arch" in
+        "x86_64")
+            echo " --> Arquitectura del sistema detectada: x86_64 (Intel/AMD 64-bit)"
+            if [ -d "$lib_dir/x86_64" ]; then
+                echo "Arquitectura del APK (x86_64) coincide con la del sistema. ¡Correcto!"
+            elif [ -d "$lib_dir/arm64-v8a" ]; then
+                echo "----------------------------------------------------------------------"
+                echo "          ERROR: ¡INCOMPATIBILIDAD DE ARQUITECTURAS! (ARM)          "
+                echo " El APK que proporcionaste es para procesadores ARM (arm64-v8a)."
+                echo " Tu computadora usa un procesador x86_64."
+                echo " Por favor, consigue la versión x86_64 del APK de Minecraft."
+                echo "----------------------------------------------------------------------"
+                echo "Limpiando el directorio de extracción incompatible..."
+                rm -rf "$target_dir"
+                exit 1
+            elif [ -d "$lib_dir/x86" ]; then
+                echo "----------------------------------------------------------------------"
+                echo "      ERROR: ¡INCOMPATIBILIDAD DE ARQUITECTURAS! (32-bit vs 64-bit)     "
+                echo " El APK que proporcionaste es para la arquitectura x86 (32-bit)."
+                echo " Tu sistema operativo es x86_64 (64-bit) y no puede cargar estas librerías."
+                echo " Por favor, consigue la versión x86_64 del APK de Minecraft."
+                echo "----------------------------------------------------------------------"
+                echo "Limpiando el directorio de extracción incompatible..."
+                rm -rf "$target_dir"
+                exit 1
+            else
+                echo "----------------------------------------------------------------------"
+                echo "              ERROR: ARQUITECTURA DEL APK NO RECONOCIDA             "
+                echo " La extracción del APK no produjo un directorio de librerías compatible ('x86_64')."
+                echo " El APK podría estar corrupto o ser de una arquitectura desconocida."
+                echo "----------------------------------------------------------------------"
+                echo "Limpiando el directorio de extracción fallida..."
+                rm -rf "$target_dir"
+                exit 1
+            fi
+            ;;
+
+        "aarch64")
+            echo "--> Arquitectura del sistema detectada: aarch64 (ARM 64-bit)"
+            if [ -d "$lib_dir/arm64-v8a" ]; then
+                echo "Arquitectura del APK (arm64-v8a) coincide con la del sistema. ¡Correcto!"
+            elif [ -d "$lib_dir/x86_64" ] || [ -d "$lib_dir/x86" ]; then
+                echo "----------------------------------------------------------------------"
+                echo "          ERROR: ¡INCOMPATIBILIDAD DE ARQUITECTURAS! (x86)          "
+                echo " El APK que proporcionaste es para procesadores Intel/AMD (x86 o x86_64)."
+                echo " Tu computadora usa un procesador ARM (aarch64)."
+                echo " Por favor, consigue la versión arm64-v8a del APK de Minecraft."
+                echo "----------------------------------------------------------------------"
+                echo "Limpiando el directorio de extracción incompatible..."
+                rm -rf "$target_dir"
+                exit 1
+            else
+                echo "----------------------------------------------------------------------"
+                echo "              ERROR: ARQUITECTURA DEL APK NO RECONOCIDA             "
+                echo " La extracción del APK no produjo un directorio de librerías compatible ('arm64-v8a')."
+                echo " El APK podría estar corrupto o ser de una arquitectura desconocida."
+                echo "----------------------------------------------------------------------"
+                echo "Limpiando el directorio de extracción fallida..."
+                rm -rf "$target_dir"
+                exit 1
+            fi
+            ;;
+
+        *)
+            echo "ADVERTENCIA: La verificación de arquitectura no está implementada para sistemas '$host_arch'."
+            echo "Continuando bajo tu propio riesgo..."
+            ;;
+    esac
+    echo ""
+}
+
+check_cpu_instructions
+
+print_info
+
+# --- Validación Inicial y Obtención de Ruta APK ---
+MINECRAFT_APK_PATH="$1" # Intenta obtener la ruta del primer argumento
+
+# Bucle para solicitar la ruta del APK si no se proporcionó o es inválida
+while true; do
+    # Si la ruta está vacía, pedirla
+    if [ -z "$MINECRAFT_APK_PATH" ]; then
+        read -p "Por favor, ingresa la ruta completa al archivo .apk de Minecraft: " MINECRAFT_APK_PATH
+        # Si el usuario presiona Enter sin escribir nada, volver a preguntar
+        if [ -z "$MINECRAFT_APK_PATH" ]; then
+            echo "Entrada vacía. Intenta de nuevo."
+            continue
+        fi
+    fi
+
+    # Verificar si el archivo existe (tenemos que sanitizar la ruta quitando las comillas, si las hubiese... )
+
+    MINECRAFT_APK_PATH=$(echo "$MINECRAFT_APK_PATH" | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//')
+
+    if [ ! -f "$MINECRAFT_APK_PATH" ]; then
+        echo "Error: Archivo no encontrado en '$MINECRAFT_APK_PATH'"
+        # Limpiar la variable para que la próxima iteración del bucle la pida de nuevo
+        MINECRAFT_APK_PATH=""
+        continue # Volver al inicio del bucle
+    else
+        # El archivo existe, salir del bucle
+        break
+    fi
+done
+
+# --- Verificar si ya estan instalados ---
+if ! command -v mcpelauncher-extract &> /dev/null; then
+    EXTRACTOR_INSTALLED=false
+else
+    EXTRACTOR_INSTALLED=true
+fi
+
+if ! command -v mcpelauncher-client &> /dev/null; then
+    LAUNCHER_INSTALLED=false
+else
+    LAUNCHER_INSTALLED=true
+fi
+
+VERSIONS_BASE_DIR="$HOME/.local/share/mcpelauncher/versions"
+
+MC_DETECTED=false
+MINECRAFT_VERSION=""
+
+# --- Obtención de la Versión ---
+# Intenta obtener la versión del segundo argumento
+# Si no se pasó el segundo argumento O si el primer argumento tampoco se pasó (y $2 sería ahora $1), pedir una ruta o bien seleccionar una version por defecto.
+if [ -n "$2" ]; then
+    MINECRAFT_VERSION="$2"
+    if [ -f "$VERSIONS_BASE_DIR/$MINECRAFT_VERSION/lib/x86_64/libminecraftpe.so" ]; then
+    	echo "Datos existentes detectados en $VERSIONS_BASE_DIR/$MINECRAFT_VERSION "
+    	MC_DETECTED=true
+    else
+        echo "No existen los datos de Minecraft para la versión $MINECRAFT_VERSION proporcionada."
+        echo "El archivo libminecraftpe.so no existe en $VERSIONS_BASE_DIR/$MINECRAFT_VERSION/lib/x86_64/"
+        echo "Se ocupará el apk para extraer los datos."
+    fi
+else
+    # Si no se pasó $2, verificamos si $1 originalmente estaba vacío.
+    # Si $1 estaba vacío, $2 (como argumento original) definitivamente no se pasó.
+    # Si $1 no estaba vacío, $2 (como argumento original) no se pasó.
+    # En ambos casos donde $2 no se pasó, usamos el valor por defecto.
+    
+    if [ -z "$MINECRAFT_VERSION" ]; then
+        if [ -d "$VERSIONS_BASE_DIR" ] && [ "$(ls -A "$VERSIONS_BASE_DIR")" ]; then
+            echo "Versiones existentes encontradas en $VERSIONS_BASE_DIR:"
+            ls "$VERSIONS_BASE_DIR"
+            echo ""
+            # Si el usuario presiona Enter sin escribir nada, se le pregúntará cual versión.
+            echo "Si pulsas enter y/o no se detecta una version, se le preguntará la versión del apk proporcionado"
+            read -p "Escribe una version de los que aparecen en la lista: " MINECRAFT_VERSION
+            # Verificamos si existe los datos de Minecraft
+            if [ -f "$VERSIONS_BASE_DIR/$MINECRAFT_VERSION/lib/x86_64/libminecraftpe.so" ]; then
+                echo "Datos detectados."
+     	 	MC_DETECTED=true
+     	    else
+     	        echo ""
+     	        echo ""
+                echo "Entrada no valida o se decide escribir la versión"
+                echo ""
+                echo "Pista: El apk proporcionado, tiene como nombre de archivo y en esta ruta: $MINECRAFT_APK_PATH"
+                echo "NOTA: SOLO ESCRIBA LA VERSIÓN UNICAMENTE, NO EL NOMBRE COMPLETO DEL ARCHIVO NI LA RUTA !!"
+                echo ""
+                echo "Si pulsas enter dejando el campo vacío, se va a crear una carpeta 'current' "
+                echo ""
+                read -p "Escribe la version de Minecraft del apk que estás extrayendo: " MINECRAFT_VERSION
+                if [ -z "$MINECRAFT_VERSION" ]; then
+                    MINECRAFT_VERSION="current" # Versión por defecto
+                    echo "No existe carpeta de versiones, usando por defecto: $MINECRAFT_VERSION"
+                    echo "y se ocupará el apk para extrer los datos."
+                else
+            	    echo "Usando $MINECRAFT_VERSION como ruta de extracción y empleando apk..."
+                fi
+            fi
+        else
+            echo "No existe carpeta de versiones, se te pide la versión."
+            echo ""
+            echo "Pista: El apk proporcionado, tiene como nombre de archivo y en esta ruta: $MINECRAFT_APK_PATH"
+            echo "NOTA: SOLO ESCRIBA LA VERSIÓN UNICAMENTE, NO EL NOMBRE COMPLETO DEL ARCHIVO NI LA RUTA !!"
+            echo ""
+            echo "Si pulsas enter dejando el campo vacío, se va a crear una carpeta 'current' "
+            echo ""
+            read -p "Escribe la version de Minecraft del apk que estás extrayendo: " MINECRAFT_VERSION
+            if [ -z "$MINECRAFT_VERSION" ]; then
+                MINECRAFT_VERSION="current" # Versión por defecto
+                echo "No existe carpeta de versiones, usando por defecto: $MINECRAFT_VERSION"
+                echo "y se ocupará el apk para extrer los datos."
+            else
+            	echo "Usando $MINECRAFT_VERSION como ruta de extracción y empleando apk..."
+            fi
+        fi
+    fi
+fi
+
+
+# Ruta de instalación final de los datos del juego
+TARGET_DIR="$VERSIONS_BASE_DIR/$MINECRAFT_VERSION"
+
+
+# --- Comienzo del Script Principal ---
+echo ""
+echo "Automatizador de Instalación de MCPELauncher"
+echo "==========================================="
+echo "Usando APK: $MINECRAFT_APK_PATH"
+echo "Usando versión de Minecraft: $MINECRAFT_VERSION"
+echo "Directorio de datos del juego: $TARGET_DIR"
+echo "MCPE Extractor se encuentra instalado: $EXTRACTOR_INSTALLED"
+echo "MCPE Launcher se encuentra instalado: $LAUNCHER_INSTALLED"
+echo "Directorio de trabajo: $(pwd)"
+echo "==========================================="
+read -p "Presiona Enter para comenzar la instalación..."
+
+# Verificar herramientas básicas necesarias ANTES de empezar
+
+PKG_MANAGER=""
+if command -v dnf &> /dev/null; then 
+   PKG_MANAGER="dnf"; 
+elif command -v apt-get &> /dev/null; 
+   then PKG_MANAGER="apt";
+elif command -v pacman &> /dev/null; 
+   then PKG_MANAGER="pacman"; 
+elif command -v xbps-install &> /dev/null; 
+   then PKG_MANAGER="xbps"; 
+fi
+
+# --- Paso 0: Instalar Herramientas básicas ---
+print_step 0 7 "Instalando dependencias básicas"
+if ! [[ $LAUNCHER_INSTALLED == true && $EXTRACTOR_INSTALLED == true ]]; then
+     echo "Intentando instalar dependencias..."
+     # PKG_MANAGER ya está detectado arriba
+     case "$PKG_MANAGER" in
+         dnf)
+             echo "Detectado dnf (Fedora/RHEL). Instalando dependencias..."
+             run_as_root dnf install -y clang cmake make git
+             ;;
+         apt)
+             echo "Detectado apt (Debian/Ubuntu). Instalando dependencias (lista aproximada)..."
+             run_as_root apt-get update
+             run_as_root apt-get install -y clang cmake make git
+             ;;
+         pacman)
+             echo "Detectado pacman (Arch Linux). Instalando dependencias del lanzador..."
+             # Vamos a usar LANG=C para forzar inglés y 'yes y' para responder afirmativamente.
+             yes y | LANG=C run_as_root pacman -Syu --needed --noconfirm clang cmake make git base-devel
+             ;;
+         xbps)
+             echo "Detectado xbps (Void Linux). Instalando dependencias..."
+             run_as_root xbps-install -S void-repo-multilib || true
+             run_as_root xbps-install -Su
+             yes | run_as_root xbps-install clang cmake make git
+             ;;
+         *)
+             echo "Advertencia: No se pudo detectar un gestor de paquetes compatible (dnf, apt, pacman)."
+             echo "Asegúrate de tener instaladas manualmente las dependencias listadas en la documentación de mcpelauncher."
+             read -p "Presiona Enter para continuar bajo tu propio riesgo, o Ctrl+C para cancelar."
+             ;;
+     esac
+     echo "--- Dependencias críticas instaladas ---"
+else
+     echo "--- Omitiendo instalacion de dependencias críticas ---"
+fi
+
+
+print_step 1 7 "Verificando herramientas básicas (git, cmake, make, C/C++ compiler)"
+if ! [[ $LAUNCHER_INSTALLED == true && $EXTRACTOR_INSTALLED == true ]]; then
+    # (El resto del script continúa igual que antes...)
+    check_command git
+    check_command cmake
+    check_command make
+    # Intentar verificar clang o g++
+    if ! command -v clang &> /dev/null && ! command -v g++ &> /dev/null; then
+         echo "Error: No se encontró un compilador C++ (clang o g++). Por favor, instala uno."
+         exit 1
+    elif command -v clang &> /dev/null; then
+         COMPILER_C="clang"
+         COMPILER_CXX="clang++"
+         echo "Usando clang/clang++ como compilador."
+    else
+         COMPILER_C="gcc"
+         COMPILER_CXX="g++"
+         echo "Usando gcc/g++ como compilador."
+    fi
+else
+    echo "--- MCPE Extractor y MCPE Launcher ya detectados. Omitiendo verificación de herramientas de build. ---"
+fi
+
+
+INSTALL_DIR=$(pwd) # Guardar el directorio actual
+
+# --- Verificación y Corrección de Conflictos Específicos (Pacman zlib) ---
+
+if [[ "$PKG_MANAGER" == "pacman" ]]; then
+    echo ""
+    echo "--- Verificando conflicto zlib/zlib-ng (pacman)... ---"
+    NEEDS_ZLIB_REPLACE=false
+    # Comprobar si los paquetes -ng están instalados
+    if pacman -Q zlib-ng-compat || lib32-zlib-ng-compat &> /dev/null; then
+        echo "Se detectó 'zlib-ng-compat' instalado."
+        NEEDS_ZLIB_REPLACE=true
+    fi 
+
+    if [[ "$NEEDS_ZLIB_REPLACE" == "true" ]]; then
+        echo "Intentando reemplazar automáticamente paquetes zlib-ng con paquetes zlib estándar..."
+        echo "Se usará 'yes y | LANG=C ...' para intentar confirmar automáticamente el reemplazo en cualquier idioma."
+
+        # Vamos a usar LANG=C para forzar inglés y 'yes y' para responder afirmativamente.
+        if yes y | LANG=C run_as_root pacman -S zlib lib32-zlib; then
+            echo "Reemplazo de zlib completado con éxito."
+        else
+            if ! pacman -Q zlib-ng-compat &> /dev/null; then
+                echo "ADVERTENCIA: El comando pacman devolvió un error, pero el reemplazo parece haber funcionado. Continuando..."
+            else
+                echo "-----------------------------------------------------------------------------------"
+                echo "          ERROR CRÍTICO: Falló el reemplazo automático de zlib-ng.                 "
+                echo "Por favor, ejecuta el siguiente comando manualmente en tu terminal para arreglarlo:"
+                echo ""
+                echo "    sudo pacman -S zlib lib32-zlib"
+                echo ""
+                echo "Luego, vuelve a ejecutar este script."
+                echo "-----------------------------------------------------------------------------------"
+                exit 1
+            fi
+        fi
+    else
+        echo "No se encontraron paquetes zlib-ng en conflicto. No se requiere reemplazo."
+    fi
+    echo "--- Verificación de conflicto zlib finalizada ---"
+    echo "" # Añadir espacio
+fi
+# --- FIN Bloque Verificación Conflicto ---
+
+# --- Paso 0: Instalar Dependencias de MCPE Extractor ---
+print_step 2 7 "Instalando dependencias del extractor"
+if ! [[ $EXTRACTOR_INSTALLED == true ]]; then
+     echo "Intentando instalar dependencias..."
+     # PKG_MANAGER ya está detectado arriba
+     case "$PKG_MANAGER" in
+         dnf)
+             echo "Detectado dnf (Fedora/RHEL). Instalando dependencias..."
+             run_as_root dnf install -y libzip-devel
+             ;;
+         apt)
+             echo "Detectado apt (Debian/Ubuntu). Instalando dependencias (lista aproximada)..."
+             run_as_root apt-get update
+             run_as_root apt-get install -y libzip-dev
+             ;;
+         pacman)
+             echo "Detectado pacman (Arch Linux). Instalando dependencias del extractor..."
+             echo "------------------------------AVISO-----------------------------------"
+             echo "    SI EL SCRIPT SE DETIENE ARROJANDO UN ERROR DE CONFLICTO, DEBES    "
+             echo "                  VOLVER A EJECUTAR EL SCRIPT                         "
+             echo "----------------------------------------------------------------------"
+             # Vamos a usar LANG=C para forzar inglés y 'yes y' para responder afirmativamente.
+             yes y | LANG=C run_as_root pacman -Syu --needed base-devel libzip
+             ;;
+         xbps)
+             echo "Detectado xbps (Void Linux). Instalando dependencias del extractor..."
+             yes | run_as_root xbps-install libzip-devel libudev-devel libevdev-devel
+             ;;
+         *)
+             echo "Advertencia: No se pudo detectar un gestor de paquetes compatible (dnf, apt, pacman)."
+             echo "Asegúrate de tener instaladas manualmente las dependencias listadas en la documentación de mcpelauncher."
+             read -p "Presiona Enter para continuar bajo tu propio riesgo, o Ctrl+C para cancelar."
+             ;;
+     esac
+     echo "--- Dependencias (intentado) instalar ---"
+else
+     echo "--- Omitiendo instalacion de dependencias ya que MCPE Extractor se encuentra instalado ---"
+fi
+
+# --- Paso 1: Compilar e Instalar mcpelauncher-extract ---
+print_step 3 7 "Compilando e Instalando mcpelauncher-extract"
+if ! [[ $EXTRACTOR_INSTALLED == true ]]; then
+     if [ -d "$EXTRACTOR_SRC_DIR" ]; then
+         echo "Directorio '$EXTRACTOR_SRC_DIR' ya existe. Omitiendo clonación y limpiando archivos residuales y actualizando."
+         cd "$EXTRACTOR_SRC_DIR"
+         git clean -fdx
+         git pull
+     else
+         git clone https://github.com/minecraft-linux/mcpelauncher-extract.git -b ng "$EXTRACTOR_SRC_DIR"
+         cd "$EXTRACTOR_SRC_DIR"
+     fi
+     mkdir -p build && cd build
+     # Añadida la bandera -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+     cmake .. -DCMAKE_C_COMPILER=$COMPILER_C -DCMAKE_CXX_COMPILER=$COMPILER_CXX -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+     echo "Compilando mcpelauncher-extract..."
+     make -j$(nproc)
+     echo "Instalando mcpelauncher-extract..."
+     run_as_root make install
+     cd "$INSTALL_DIR"
+     echo "--- mcpelauncher-extract instalado ---"
+     EXTRACTOR_INSTALLED=true
+else
+     echo "--- mcpelauncher-extract ya existe en $(dirname "$(which mcpelauncher-extract)") ---"
+fi
+
+# --- Paso 2: Preparar los Archivos del Juego Minecraft ---
+print_step 4 7 "Extrayendo archivos de Minecraft desde el APK"
+if ! [[ $MC_DETECTED == true ]]; then
+     mkdir -p "$(dirname "$TARGET_DIR")"
+     echo "Extrayendo a $TARGET_DIR..."
+     mcpelauncher-extract "$MINECRAFT_APK_PATH" "$TARGET_DIR"
+
+     # --- Verificar la arquitectura del apk descargado.
+     check_apk_architecture "$TARGET_DIR"
+     echo "--- Archivos de Minecraft extraídos ---"
+else
+     echo "Ya se ha detectado una carpeta con una version existente: $MINECRAFT_VERSION"
+fi
+
+
+# --- Paso 3: Instalar Dependencias del lanzador ---
+print_step 5 7 "Instalando dependencias del lanzador"
+if ! [[ $LAUNCHER_INSTALLED == true ]]; then
+     echo "Intentando instalar dependencias..."
+     # PKG_MANAGER ya está detectado arriba
+     case "$PKG_MANAGER" in
+         dnf)
+             echo "Detectado dnf (Fedora/RHEL). Instalando dependencias..."
+             run_as_root dnf install -y clang cmake make git ca-certificates libstdc++ glibc-devel libpng-devel zlib-devel libX11-devel libXi-devel libcurl-devel systemd-devel libevdev-devel mesa-libEGL-devel alsa-lib-devel pulseaudio-libs-devel mesa-dri-drivers systemd-devel libXtst-devel openssl-devel qt5-qtbase-devel qt5-qtwebengine-devel qt5-qtdeclarative-devel qt5-qtsvg-devel qt5-qtquickcontrols qt5-qtquickcontrols2
+             ;;
+         apt)
+             echo "Detectado apt (Debian/Ubuntu). Instalando dependencias (lista aproximada)..."
+             run_as_root apt-get update
+             run_as_root apt-get install -y clang cmake make git ca-certificates libc6-dev libpng-dev zlib1g-dev libx11-dev libxi-dev libcurl4-openssl-dev libsystemd-dev libevdev-dev libegl1-mesa-dev libasound2-dev libpulse-dev libxtst-dev libssl-dev qtbase5-dev qtwebengine5-dev qtdeclarative5-dev libqt5svg5-dev qtquickcontrols2-5-dev libqt5quickcontrols2-5 qttools5-dev-tools libudev-dev libstdc++-12-dev
+             echo "Instalando Módulos QML para el inicio de Sesión de Xbox"
+             run_as_root apt-get install -y qml-module-qtquick-controls qml-module-qtquick-layouts qml-module-qtquick-dialogs qml-module-qtquick-window2 qml-module-qtwebengine qml-module-org-kde-qqc2desktopstyle
+             ;;
+         pacman)
+             echo "Detectado pacman (Arch Linux). Instalando dependencias del lanzador..."
+             echo "------------------------------AVISO-----------------------------------"
+             echo "    SI EL SCRIPT SE DETIENE ARROJANDO UN ERROR DE CONFLICTO, DEBES    "
+             echo "                  VOLVER A EJECUTAR EL SCRIPT                         "
+             echo "----------------------------------------------------------------------"        
+             # Vamos a usar LANG=C para forzar inglés y 'yes y' para responder afirmativamente.
+             LANG=C run_as_root pacman -Syu --noconfirm --needed clang cmake make git ca-certificates libpng zlib libx11 libxi curl systemd libevdev mesa alsa-lib libpulse libxtst openssl qt5-base qt5-webengine qt5-declarative qt5-svg qt5-quickcontrols qt5-quickcontrols2
+             ;;
+         xbps)
+             echo "Detectado xbps (Void Linux). Instalando dependencias del lanzador..."
+             run_as_root xbps-install -S void-repo-multilib || true
+             run_as_root xbps-install -Su
+            yes | run_as_root xbps-install ca-certificates glibc-devel libpng-devel zlib-devel libX11-devel libXi-devel libcurl-devel libudev-devel libevdev-devel alsa-lib-devel pulseaudio-devel libXtst-devel openssl-devel qt5-core qt5-gui qt5-widgets qt5-network qt5-webengine qt5-declarative qt5-svg qt5-quickcontrols qt5-quickcontrols2 qt5-devel libgudev-devel MesaLib-devel mesa-dri mesa-32bit mesa-dri-32bit libpng-32bit libX11-32bit libgcc-32bit libstdc++-32bit glibc-32bit libgudev-32bit libXi-32bit alsa-lib-32bit libpulseaudio-32bit qt5-webengine-devel qt5-declarative-devel qt5-quickcontrols2-devel qt5-webchannel-devel qt5-location-devel libzip-devel
+             ;;
+         *)
+             echo "Advertencia: No se pudo detectar un gestor de paquetes compatible (dnf, apt, pacman)."
+             echo "Asegúrate de tener instaladas manualmente las dependencias listadas en la documentación de mcpelauncher."
+             read -p "Presiona Enter para continuar bajo tu propio riesgo, o Ctrl+C para cancelar."
+             ;;
+     esac
+     echo "--- Dependencias (intentado) instalar ---"
+else
+     echo "--- Omitiendo instalacion de dependencias ya que MCPE Launcher se encuentra instalado ---"
+fi
+
+# --- Paso 4: Compilar e Instalar mcpelauncher-client ---
+print_step 6 7 "Compilando e Instalando mcpelauncher-client"
+if ! [[ $LAUNCHER_INSTALLED == true ]]; then
+    if [ -d "$LAUNCHER_SRC_DIR" ]; then
+        echo "Directorio '$LAUNCHER_SRC_DIR' ya existe. Omitiendo clonación y limpiando archivos residuales y actualizando."
+        cd "$LAUNCHER_SRC_DIR"
+        git clean -fdx
+        git pull
+        git pull --recurse-submodules
+    else
+        git clone --recursive https://github.com/minecraft-linux/mcpelauncher-manifest.git "$LAUNCHER_SRC_DIR"
+        cd "$LAUNCHER_SRC_DIR"
+    fi
+    echo "Configurando mcpelauncher-client con CMake..."
+    # Usar los compiladores detectados al principio
+    # Añadida la bandera -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    cmake -S "../$LAUNCHER_SRC_DIR" \
+          -DCMAKE_C_COMPILER=$COMPILER_C \
+          -DCMAKE_CXX_COMPILER=$COMPILER_CXX \
+          -B build \
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DENABLE_DEV_PATHS=OFF \
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+          -Wno-dev
+    echo "Compilando mcpelauncher-client (esto puede tardar MUCHO)..."
+    cmake --build build --parallel $(nproc)
+    echo "Instalando mcpelauncher-client..."
+    run_as_root make -C build install
+    cd "$INSTALL_DIR"
+    echo "--- mcpelauncher-client instalado ---"
+     LAUNCHER_INSTALLED=true
+else
+    echo "--- mcpelauncher-client ya existe en $(dirname "$(which mcpelauncher-client)") ---"
+fi
+
+# --- Paso 5: Acciones Finales (Opcional) ---
+print_step 7 7 "Instalación Completa y Acciones Finales"
+
+echo "Creando acceso directo."
+
+# Tenemos que asegurarnos de que el directorio exista antes de poner el icono.
+
+mkdir -p "${ROOT_SHORTCUT}"
+mkdir -p "${ROOT_SHORTCUT_ICON}"
+
+cat <<-EOF | tee ${ROOT_SHORTCUT}/MCPE-LAUNCHER.desktop > /dev/null
+[Desktop Entry]
+Name=MCPE-LAUNCHER
+Exec=mcpelauncher-client -dg "${TARGET_DIR}"
+Icon=MCPE-LAUNCHER
+Type=Application
+EOF
+
+echo "Copiando icono del proyecto."
+
+chmod +x ${ROOT_SHORTCUT}/MCPE-LAUNCHER.desktop
+cp "${SCRIPT_DIR}/entry/MCPE-LAUNCHER.svg" "${ROOT_SHORTCUT_ICON}"
+
+echo ""
+echo "--------------------------------------------------------------------"
+echo " ¡Instalación y extracción completadas!"
+echo " Directorio de datos del juego: $TARGET_DIR"
+echo "--------------------------------------------------------------------"
+echo ""
+
+# Preguntar si ejecutar
+while true; do
+    read -p "¿Deseas ejecutar Minecraft Bedrock AHORA MISMO? (s/n): " sn
+    case $sn in
+        [Ss]* )
+            echo "Ejecutando Minecraft..."
+            if mcpelauncher-client -dg "$TARGET_DIR"; then
+                echo "Minecraft cerrado."
+            else
+                echo "Error al ejecutar Minecraft. Comando: mcpelauncher-client -dg \"$TARGET_DIR\""
+            fi
+            break;;
+        [Nn]* )
+            echo "Para ejecutarlo más tarde, usa el comando:"
+            echo "  mcpelauncher-client -dg \"$TARGET_DIR\""
+            break;;
+        * ) echo "Por favor responde si (s) o no (n).";;
+    esac
+done
+
+echo ""
+
+# Preguntar si limpiar
+while true; do
+    read -p "¿Deseas eliminar los directorios de código fuente descargados ('$EXTRACTOR_SRC_DIR' y '$LAUNCHER_SRC_DIR')? (s/n): " sn
+    case $sn in
+        [Ss]* )
+            echo "Eliminando directorios fuente..."
+            rm -rf "$INSTALL_DIR/$EXTRACTOR_SRC_DIR"
+            rm -rf "$INSTALL_DIR/$LAUNCHER_SRC_DIR"
+            echo "Directorios fuente eliminados."
+            break;;
+        [Nn]* )
+            echo "Directorios fuente conservados."
+            break;;
+        * ) echo "Por favor responde si (s) o no (n).";;
+    esac
+done
+
+echo ""
+echo "Script finalizado."
+echo "¡Instalación completada exitosamente!"
+exit 0

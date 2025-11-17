@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Rutas a verificar
+ruta1="$HOME/.var/app/com.mcpelauncher.MCPELauncher/data/mcpelauncher/games/com.mojang/"
+ruta2="$HOME/.local/share/mcpelauncher/games/com.mojang/"
+
+# Verificar y abrir la primera ruta si existe
+if [ -d "$ruta1" ]; then
+    xdg-open "$ruta1"
+fi
+
+# Verificar y abrir la segunda ruta si existe
+if [ -d "$ruta2" ]; then
+    xdg-open "$ruta2"
+fi

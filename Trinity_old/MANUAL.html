@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trinity Launcher - Documentación</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4a6fa5;
+            --primary-dark: #3a5a80;
+            --secondary: #6c5ce7;
+            --accent: #00cec9;
+            --light: #f8f9fa;
+            --dark: #2d3436;
+            --success: #00b894;
+            --warning: #fdcb6e;
+            --danger: #d63031;
+            --gray: #636e72;
+            --card-bg: #ffffff;
+            --sidebar-bg: #2c3e50;
+            --code-bg: #2d3748;
+            --code-text: #e2e8f0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background-color: #f5f7fa;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        .logo {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            max-width: 700px;
+            margin: 0 auto;
+            opacity: 0.9;
+        }
+
+        .badges {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            backdrop-filter: blur(5px);
+        }
+
+        .container {
+            display: flex;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        .sidebar {
+            width: 250px;
+            background: var(--sidebar-bg);
+            color: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            height: fit-content;
+            position: sticky;
+            top: 2rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .sidebar h2 {
+            font-size: 1.3rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid var(--accent);
+        }
+
+        .nav-links {
+            list-style: none;
+        }
+
+        .nav-links li {
+            margin-bottom: 0.8rem;
+        }
+
+        .nav-links a {
+            color: rgba(255, 255, 255, 0.85);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            padding: 0.6rem 0.8rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            background: var(--primary);
+            color: white;
+            transform: translateX(4px);
+        }
+
+        .nav-links a i {
+            margin-right: 0.8rem;
+            width: 20px;
+            text-align: center;
+        }
+
+        .content {
+            flex: 1;
+            margin-left: 2rem;
+        }
+
+        .section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .section:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        .section h2 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .section h2 i {
+            color: var(--secondary);
+        }
+
+        .section h3 {
+            font-size: 1.4rem;
+            margin: 1.5rem 0 1rem;
+            color: var(--primary);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .feature-card {
+            background: #f8f9fa;
+            border-left: 4px solid var(--accent);
+            padding: 1.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            background: #eef2f7;
+            transform: translateY(-3px);
+        }
+
+        .feature-card h4 {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+            color: var(--primary-dark);
+        }
+
+        .tabs {
+            display: flex;
+            margin: 1.5rem 0;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 0.8rem 1.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--gray);
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            color: var(--secondary);
+            border-bottom: 3px solid var(--secondary);
+        }
+
+        .tab-content {
+            display: none;
+            padding: 1.5rem 0;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .code-block {
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .highlight {
+            background: rgba(108, 92, 231, 0.15);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .terminal {
+            display: flex;
+            flex-direction: column;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 1.5rem 0;
+        }
+
+        .terminal-header {
+            background: var(--dark);
+            color: white;
+            padding: 0.5rem 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: #ff5f56; }
+        .terminal-dot.yellow { background: #ffbd2e; }
+        .terminal-dot.green { background: #27c93f; }
+
+        .terminal-body {
+            background: #1e1e1e;
+            color: #f8f8f2;
+            padding: 1.5rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .terminal-body .comment {
+            color: #6272a4;
+        }
+
+        .terminal-body .command {
+            color: #50fa7b;
+        }
+
+        .terminal-body .path {
+            color: #bd93f9;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th {
+            background: var(--primary);
+            color: white;
+            text-align: left;
+            padding: 1rem;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        tr:hover {
+            background: #edf2f7;
+        }
+
+        footer {
+            background: var(--dark);
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 3rem;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        .license {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 1.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            margin-top: 1.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                position: relative;
+                top: 0;
+                margin-bottom: 2rem;
+            }
+            
+            .content {
+                margin-left: 0;
+            }
+            
+            .features {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .badges {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .logo {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-cube"></i>
+            </div>
+            <h1>Trinity Launcher</h1>
+            <p class="subtitle">Entorno para Minecraft Bedrock en Linux, diseñado para funcionar dentro de Flatpak</p>
+            <div class="badges">
+                <div class="badge">
+                    <i class="fab fa-linux"></i> Linux
+                </div>
+                <div class="badge">
+                    <i class="fab fa-qt"></i> Qt5
+                </div>
+                <div class="badge">
+                    <i class="fas fa-cubes"></i> C++
+                </div>
+                <div class="badge">
+                    <i class="fas fa-box"></i> Flatpak
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <aside class="sidebar">
+            <h2>Contenido</h2>
+            <ul class="nav-links">
+                <li><a href="#explicacion" class="active"><i class="fas fa-book"></i> Explicación del Código</a></li>
+                <li><a href="#compilacion"><i class="fas fa-terminal"></i> Compilación con qmake</a></li>
+                <li><a href="#empaquetado"><i class="fas fa-box-open"></i> Empaquetado en Flatpak</a></li>
+                <li><a href="#pruebas"><i class="fas fa-vial"></i> Pruebas</a></li>
+                <li><a href="#licencia"><i class="fas fa-file-contract"></i> Licencia</a></li>
+            </ul>
+        </aside>
+
+        <main class="content">
+            <section id="explicacion" class="section">
+                <h2><i class="fas fa-book"></i> Explicación del Código</h2>
+                
+                <p><strong>Trinity Launcher</strong> es un entorno gráfico para ejecutar y gestionar <strong>Minecraft: Bedrock Edition</strong> en Linux, diseñado para funcionar dentro de <strong>Flatpak</strong>. Incluye dos aplicaciones complementarias escritas en <strong>C++ con Qt5</strong>:</p>
+                
+                <div class="features">
+                    <div class="feature-card">
+                        <h4><i class="fas fa-rocket"></i> trinchete</h4>
+                        <p><strong>Launcher principal</strong>: gestiona versiones del juego, permite extraer desde APK y lanza la partida.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4><i class="fas fa-puzzle-piece"></i> trinito</h4>
+                        <p><strong>Gestor de contenido</strong>: instala mods, texturas, packs de desarrollo y mundos.</p>
+                    </div>
+                </div>
+
+                <h3>trinchete.cpp — Launcher Multiversión</h3>
+                <p><strong>Funcionalidades principales:</strong></p>
+                <ul>
+                    <li><span class="highlight">Listado de versiones</span>: escanea <code>.../mcpelauncher/versions/</code> y muestra carpetas en un <code>QComboBox</code>.</li>
+                    <li><span class="highlight">Extracción de APK</span>: abre un diálogo para seleccionar un <code>.apk</code> y darle un nombre (ej. <code>1.21.0</code>). Luego ejecuta: <br>
+                    <code>mcpelauncher-extract &lt;archivo.apk&gt; &lt;destino&gt;</code></li>
+                    <li><span class="highlight">Validación de integridad</span>: comprueba que exista <code>lib/x86_64/libminecraftpe.so</code> antes de lanzar.</li>
+                    <li><span class="highlight">Lanzamiento del juego</span>: ejecuta <code>mcpelauncher-client -dg &lt;ruta&gt;</code> y cierra la interfaz.</li>
+                    <li><span class="highlight">Acceso a herramientas</span>: botón <strong>"Tools"</strong> que ejecuta el binario <code>trinito</code> desde el mismo directorio (<code>applicationDirPath()</code>).</li>
+                </ul>
+
+                <h3>trinito.cpp — Gestor de Contenido</h3>
+                <p><strong>Estructura por pestañas (<code>QTabWidget</code>):</strong></p>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Pestaña</th>
+                                <th>Tipo de selección</th>
+                                <th>Destino</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Mods</strong></td>
+                                <td>Archivo</td>
+                                <td><code>behavior_packs/</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Texturas</strong></td>
+                                <td>Archivo</td>
+                                <td><code>resource_packs/</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Desarrollo</strong></td>
+                                <td>Archivo</td>
+                                <td><code>development_behavior_packs/</code> y <code>development_resource_packs/</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Mundos</strong></td>
+                                <td><strong>Carpeta</strong></td>
+                                <td><code>minecraftWorlds/</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <p><strong>Funcionalidades clave:</strong></p>
+                <ul>
+                    <li><span class="highlight">Copia segura</span>: si ya existe un elemento con el mismo nombre, pregunta antes de reemplazar.</li>
+                    <li><span class="highlight">Copia recursiva</span>: para carpetas de mundos, usa una función recursiva <code>copyDirectory()</code>.</li>
+                    <li><span class="highlight">Validación mínima</span>: asume que el usuario proporciona contenido válido.</li>
+                    <li><span class="highlight">Rutas portables</span>: todo basado en <code>QStandardPaths::GenericDataLocation + "/mcpelauncher/games/com.mojang"</code>.</li>
+                </ul>
+            </section>
+
+            <section id="compilacion" class="section">
+                <h2><i class="fas fa-terminal"></i> Compilación con qmake</h2>
+                <p>Ambas aplicaciones se compilan con el flujo estándar de <strong>Qt + qmake</strong>.</p>
+                
+                <h3>1. Compilar trinchete</h3>
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                        <span>trinchete-compilation.sh</span>
+                    </div>
+                    <div class="terminal-body">
+                        qmake -project -o trinchete.pro<br>
+                        <span class="comment"># Añadir soporte para widgets (requerido en Qt5+)</span><br>
+                        echo "QT += widgets" &gt;&gt; trinchete.pro<br>
+                        <span class="comment"># Generar Makefile</span><br>
+                        qmake trinchete.pro<br>
+                        <span class="comment"># Compilar</span><br>
+                        make
+                    </div>
+                </div>
+
+                <h3>2. Compilar trinito</h3>
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                        <span>trinito-compilation.sh</span>
+                    </div>
+                    <div class="terminal-body">
+                        qmake -project -o trinito.pro<br>
+                        <span class="comment"># Añadir widgets</span><br>
+                        echo "QT += widgets" &gt;&gt; trinito.pro<br>
+                        <span class="comment"># Generar Makefile</span><br>
+                        qmake trinito.pro<br>
+                        <span class="comment"># Compilar</span><br>
+                        make
+                    </div>
+                </div>
+
+                <h3>Estructura esperada en <code>files/</code></h3>
+                <div class="code-block">
+files/<br>
+├── bin/<br>
+│   ├── trinchete<br>
+│   ├── trinito<br>
+│   ├── mcpelauncher-client<br>
+│   └── mcpelauncher-extract<br>
+└── share/<br>
+    ├── applications/<br>
+    │   └── com.trench.trinity.launcher.desktop<br>
+    ├── icons/<br>
+    │   └── com.trench.trinity.launcher.svg<br>
+    └── mcpelauncher/<br>
+        ├── background.jpg<br>
+        └── lib/
+                </div>
+            </section>
+
+            <section id="empaquetado" class="section">
+                <h2><i class="fas fa-box-open"></i> Empaquetado en Flatpak</h2>
+                
+                <h3>Requisitos previos</h3>
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                        <span>flatpak-install.sh</span>
+                    </div>
+                    <div class="terminal-body">
+                        flatpak install flathub io.qt.qtwebengine.BaseApp//5.15-23.08<br>
+                        flatpak install flathub org.kde.Platform//5.15-23.08 org.kde.Sdk//5.15-23.08
+                    </div>
+                </div>
+
+                <h3>Construcción</h3>
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                        <span>flatpak-build.sh</span>
+                    </div>
+                    <div class="terminal-body">
+                        <span class="comment"># Generar build y repo</span><br>
+                        flatpak-builder --user --force-clean build-dir com.trench.trinity.launcher.json<br>
+                        flatpak-builder --repo=repo --force-clean build-dir com.trench.trinity.launcher.json<br>
+                        <br>
+                        <span class="comment"># Crear paquete</span><br>
+                        flatpak build-bundle repo trinity.flatpak com.trench.trinity.launcher<br>
+                        <br>
+                        <span class="comment"># Instalar</span><br>
+                        flatpak install ./trinity.flatpak
+                    </div>
+                </div>
+
+                <p><strong>Nota:</strong> El manifest <code>com.trench.trinity.launcher.json</code> debe incluir los módulos de <code>libevdev</code>, <code>libzip</code> y copiar el directorio <code>files/</code> a <code>/app</code>.</p>
+            </section>
+
+            <section id="pruebas" class="section">
+                <h2><i class="fas fa-vial"></i> Pruebas</h2>
+                
+                <h3>Fuera de Flatpak (desarrollo)</h3>
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                        <span>local-test.sh</span>
+                    </div>
+                    <div class="terminal-body">
+                        <span class="comment"># Compilar y ejecutar</span><br>
+                        make && ./trinchete<br>
+                        make && ./trinito
+                    </div>
+                </div>
+
+                <h3>Dentro de Flatpak</h3>
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                        <span>flatpak-test.sh</span>
+                    </div>
+                    <div class="terminal-body">
+                        <span class="comment"># Launcher principal</span><br>
+                        flatpak run com.trench.trinity.launcher<br>
+                        <br>
+                        <span class="comment"># Abrir gestor de contenido desde el botón "Tools"</span><br>
+                        <span class="comment"># o directamente:</span><br>
+                        flatpak run --command=trinito com.trench.trinity.launcher
+                    </div>
+                </div>
+
+                <h3>Rutas de datos</h3>
+                <div class="features">
+                    <div class="feature-card">
+                        <h4><i class="fas fa-box"></i> En Flatpak</h4>
+                        <p><code>~/.var/app/com.trench.trinity.launcher/data/mcpelauncher/</code></p>
+                    </div>
+                    <div class="feature-card">
+                        <h4><i class="fas fa-folder"></i> Local</h4>
+                        <p><code>~/.local/share/mcpelauncher/</code></p>
+                    </div>
+                </div>
+                <p>Ambas apps usan <code>QStandardPaths</code>, por lo que <strong>no hay diferencias en el código</strong>.</p>
+            </section>
+
+            <section id="licencia" class="section">
+                <h2><i class="fas fa-file-contract"></i> Licencia</h2>
+                <div class="license">
+                    <p>Este proyecto no incluye una licencia explícita en este documento. Consulte el archivo <code>LICENSE</code> en el repositorio para conocer los términos de uso, modificación y redistribución. Se recomienda el uso de licencias de software libre como <strong>MIT</strong> o <strong>GPL</strong>.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <h3>Trinity Launcher</h3>
+            <p>Entorno para Minecraft Bedrock en Linux</p>
+            <div class="badges" style="justify-content: center; margin-top: 1rem;">
+                <div class="badge">
+                    <i class="fab fa-linux"></i> Linux
+                </div>
+                <div class="badge">
+                    <i class="fab fa-qt"></i> Qt5
+                </div>
+                <div class="badge">
+                    <i class="fas fa-cubes"></i> C++
+                </div>
+                <div class="badge">
+                    <i class="fas fa-box"></i> Flatpak
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('.nav-links a').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
+                this.classList.add('active');
+                
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                
+                window.scrollTo({
+                    top: targetElement.offsetTop - 100,
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Highlight current section in sidebar
+        window.addEventListener('scroll', function() {
+            const sections = document.querySelectorAll('.section');
+            const navLinks = document.querySelectorAll('.nav-links a');
+            
+            let currentSectionId = '';
+            
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop - 150;
+                const sectionHeight = section.clientHeight;
+                
+                if (pageYOffset >= sectionTop && pageYOffset < sectionTop + sectionHeight) {
+                    currentSectionId = '#' + section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === currentSectionId) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+

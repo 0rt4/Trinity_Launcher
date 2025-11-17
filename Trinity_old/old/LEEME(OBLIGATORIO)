@@ -1,0 +1,22 @@
+### 🚀 CC-MC AppImage - BETA
+¡Estamos emocionados de anunciar una nueva versión de CC-MC en formato AppImage!
+
+**✨ Novedades:**
+
+- Ejecución más fácil y rápida: Ya no necesitas compilar el software. Con solo descargar el archivo AppImage, ¡ya puedes usar CC-MC!
+
+**💡 ¿Qué significa esto para ti?**
+
+- Sin complicaciones: Olvídate de problemas de compilación.
+- Listo para usar al instante: Solo descarga, ejecuta y comienza a jugar Minecraft Bedrock en LINUX.
+- Mayor compatibilidad: Al ser una AppImage, es compatible con la mayoría de las distribuciones Linux sin necesidad de instalación previa.
+
+### ⚠️ Notas importantes:
+- Solo funciona en distros actualizadas Arch, Fedora, Void, Opensuse, Ubuntu, Debian (Trixie)
+-  Al abrir la AppImage por primera vez, se instalaran las dependencias (solicitara obligatoriamente permisos de superusario o administrador para instalar las dependencias) y te permite extraer el APK del juego, despues de extraer pulsa el boton instalar archivos necesarios(solicitara permisos de administrador) . *Es necesario volver a abrir la aplicación para que el juego se inicie correctamente.*
+- si usas void debes ejecutar antes ( `sudo xbps-install -s wget` )
+- si usas linux mint necesitas ejecutar esto antes de abrir el appimage:
+```
+wget http://mirrors.kernel.org/ubuntu/pool/universe/libz/libzip/libzip5_1.5.1-0ubuntu1_amd64.deb
+sudo apt install ./libzip5_1.5.1-0ubuntu1_amd64.deb
+```

@@ -1,0 +1,373 @@
+#!/bin/bash
+
+# Script mejorado para desinstalar MCPELauncher
+# Incluye mejor manejo de errores, verificación de dependencias y compatibilidad
+
+# Salir inmediatamente si un comando falla
+set -e
+
+# --- Configuración ---
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+
+# --- Variables de estado ---
+EXTRACTOR_INSTALLED=false
+LAUNCHER_INSTALLED=false
+TARGET_DIR_EXISTS=false
+AUTH_DIR_EXISTS=false
+LAUNCHER_DATA_EXISTS=false
+SHORTCUT_EXISTS=false
+SHORTCUT_ICON_EXISTS=false
+
+EXTRACTOR_UNINSTALL_CONFIRMED=false
+LAUNCHER_UNINSTALL_CONFIRMED=false
+TARGET_DIR_UNINSTALL_CONFIRMED=false
+AUTH_DIR_UNINSTALL_CONFIRMED=false
+
+# --- Rutas ---
+EXTRACTOR_BINARY=""
+LAUNCHER_BINARY=""
+
+# Binarios adicionales
+mcpelauncher_morebinaries=(
+    /usr/local/bin/mcpelauncher-client
+    /usr/local/bin/mcpelauncher-error
+    /usr/local/bin/mcpelauncher-webview
+    /usr/local/bin/mcpelauncher-extract
+)
+
+# Directorios
+TARGET_DIR="$HOME/.local/share/mcpelauncher"
+AUTH_DIR="$HOME/.local/share/mcpelauncher-webview"
+LAUNCHER_DATA="/usr/local/share/mcpelauncher"
+
+# Acceso directo
+SHORTCUT_FILE="$HOME/.local/share/applications/MCPE-LAUNCHER.desktop"
+SVG_FILE="$HOME/.local/share/icons/hicolor/scalable/apps/MCPE-LAUNCHER.svg"
+
+# --- Funciones auxiliares ---
+print_step() {
+    echo ""
+    echo "--- [$1/$2] $3 ---"
+}
+
+print_error() {
+    echo -e "\033[1;31mERROR: $1\033[0m" >&2
+}
+
+print_warning() {
+    echo -e "\033[1;33mADVERTENCIA: $1\033[0m"
+}
+
+print_success() {
+    echo -e "\033[1;32mÉXITO: $1\033[0m"
+}
+
+check_command() {
+    if ! command -v "$1" > /dev/null 2>&1; then
+        print_error "Comando '$1' no encontrado. Por favor, instálalo."
+        exit 1
+    fi
+}
+
+run_as_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        if command -v sudo &> /dev/null; then
+            echo "Ejecutando 'sudo $*'..."
+            sudo "$@"
+        elif command -v doas &> /dev/null; then
+            echo "Ejecutando 'doas $*'..."
+            doas "$@"
+        else
+            echo "Ejecutando 'su root -c \"$*\"'..."
+            cmd="$*"
+            su root -c "$cmd"
+        fi
+    else
+        "$@"
+    fi
+}
+
+cleanup_system_files() {
+    if [[ $LAUNCHER_DATA_EXISTS == true ]]; then
+        echo "Eliminando datos de sistema de MCPE Launcher..."
+        run_as_root rm -rf "$LAUNCHER_DATA"
+    fi
+
+    echo "Borrando binarios extras de MCPE Launcher..."
+    for mcpefile in "${mcpelauncher_morebinaries[@]}"; do
+        if [[ -f "$mcpefile" ]]; then
+            run_as_root rm -f "$mcpefile"
+        fi
+    done
+}
+
+detect_void_linux() {
+    if command -v xbps-query &> /dev/null; then
+        echo "Detectado Void Linux - Modo de desinstalación compatible"
+    fi
+}
+
+# --- Verificaciones iniciales ---
+check_command bash
+
+if [ -z "$BASH_VERSION" ]; then
+    echo "Se ha detectado con otro interprete, usando Bash"
+    echo "Reiniciando script con Bash"
+    exec bash "$0" "$@"
+fi
+
+if [ "$(id -u)" -eq 0 ]; then
+   print_error "Este script no debe ejecutarse como 'root' ni usando algún elevador de privilegios como sudo!"
+   echo "Por favor ejecútelo como usuario normal."
+   echo "El script pedirá contraseña cuando se necesiten privilegios."
+   exit 1
+fi
+
+# --- Detección de componentes instalados ---
+
+# Binarios
+if command -v mcpelauncher-extract &> /dev/null; then
+    EXTRACTOR_BINARY=$(command -v mcpelauncher-extract)
+    EXTRACTOR_INSTALLED=true
+fi
+
+if command -v mcpelauncher-client &> /dev/null; then
+    LAUNCHER_BINARY=$(command -v mcpelauncher-client)
+    LAUNCHER_INSTALLED=true
+fi
+
+# Directorios
+[ -d "$TARGET_DIR" ] && TARGET_DIR_EXISTS=true
+[ -d "$AUTH_DIR" ] && AUTH_DIR_EXISTS=true
+[ -d "$LAUNCHER_DATA" ] && LAUNCHER_DATA_EXISTS=true
+
+# Archivos acceso directo
+[ -f "$SHORTCUT_FILE" ] && SHORTCUT_EXISTS=true
+[ -f "$SVG_FILE" ] && SHORTCUT_ICON_EXISTS=true
+
+# Detectar Void Linux
+detect_void_linux
+
+# --- Verificación de instalación existente ---
+if [[ $EXTRACTOR_INSTALLED == false && $LAUNCHER_INSTALLED == false && \
+      $TARGET_DIR_EXISTS == false && $AUTH_DIR_EXISTS == false ]]; then
+
+    # Limpiar archivos residuales
+    if [[ $SHORTCUT_EXISTS == true ]]; then
+        rm -f "$SHORTCUT_FILE"
+        echo "Acceso directo residual eliminado"
+    fi
+                
+    if [[ $SHORTCUT_ICON_EXISTS == true ]]; then
+        rm -f "$SVG_FILE"
+        echo "Icono de acceso directo residual eliminado"
+    fi
+
+    cleanup_system_files
+
+    echo "No hay componentes de MCPE para desinstalar"
+    exit 0
+fi
+
+# --- Comienzo del Script Principal ---
+echo ""
+echo "Desinstalación de MCPELauncher"
+echo "==========================================="
+echo "Directorio de datos del juego: $TARGET_DIR_EXISTS ($TARGET_DIR)"
+echo "Datos de autenticación de Xbox: $AUTH_DIR_EXISTS ($AUTH_DIR)"
+echo "MCPE Extractor instalado: $EXTRACTOR_INSTALLED ($EXTRACTOR_BINARY)"
+echo "MCPE Launcher instalado: $LAUNCHER_INSTALLED ($LAUNCHER_BINARY)"
+echo "Directorio de trabajo: $(pwd)"
+echo "==========================================="
+echo ""
+
+# --- CONFIRMACIONES DE DESINSTALACIÓN ---
+
+# Paso 1: Datos del juego MCPE
+print_step 1 6 "Datos del juego MCPE"
+if [[ $TARGET_DIR_EXISTS == true ]]; then
+    echo "¡ADVERTENCIA! Esto eliminará definitivamente:"
+    echo "- Todos los mundos de todas las versiones de MCPE instaladas"
+    echo "- Todos los datos del juego"
+    echo "- No podrás jugar si se elimina"
+    echo ""
+    
+    while true; do
+        read -r -p "¿Deseas borrar el directorio de los archivos del juego? (s/n): " sn
+        case $sn in
+            [Ss]* )
+                TARGET_DIR_UNINSTALL_CONFIRMED=true
+                break;;
+            [Nn]* )
+                TARGET_DIR_UNINSTALL_CONFIRMED=false
+                break;;
+            * ) echo "Por favor responde si (s) o no (n).";;
+        esac
+    done
+else
+    echo "Omitiendo borrado del directorio (no existe)"
+    TARGET_DIR_UNINSTALL_CONFIRMED=false
+fi
+
+# Paso 2: Datos de autenticación de Xbox
+print_step 2 6 "Datos de autenticación de Xbox"
+if [[ $AUTH_DIR_EXISTS == true ]]; then
+    echo "¡ADVERTENCIA! Esto:"
+    echo "- Cerrará tu sesión de Xbox en el launcher"
+    echo "- Requerirá autenticarte manualmente nuevamente"
+    echo ""
+    
+    while true; do
+        read -r -p "¿Deseas borrar los datos de autenticación de la cuenta de Xbox? (s/n): " sn
+        case $sn in
+            [Ss]* )
+                AUTH_DIR_UNINSTALL_CONFIRMED=true
+                break;;
+            [Nn]* )
+                AUTH_DIR_UNINSTALL_CONFIRMED=false
+                break;;
+            * ) echo "Por favor responde si (s) o no (n).";;
+        esac
+    done
+else
+    echo "Omitiendo borrado de datos de autenticación (no existen)"
+    AUTH_DIR_UNINSTALL_CONFIRMED=false
+fi
+
+# Paso 3: Extractor MCPE
+print_step 3 6 "Extractor MCPE"
+if [[ $EXTRACTOR_INSTALLED == true ]]; then
+    echo "¡ADVERTENCIA! Esto:"
+    echo "- Requerirá recompilar si necesitas actualizar archivos desde un APK"
+    echo ""
+    
+    while true; do
+        read -r -p "¿Deseas desinstalar el Extractor MCPE? (s/n): " sn
+        case $sn in
+            [Ss]* )
+                EXTRACTOR_UNINSTALL_CONFIRMED=true
+                break;;
+            [Nn]* )
+                EXTRACTOR_UNINSTALL_CONFIRMED=false
+                break;;
+            * ) echo "Por favor responde si (s) o no (n).";;
+        esac
+    done
+else
+    echo "Omitiendo borrado del extractor (no está instalado)"
+    EXTRACTOR_UNINSTALL_CONFIRMED=false
+fi
+
+# Paso 4: Launcher MCPE
+print_step 4 6 "Launcher MCPE"
+if [[ $LAUNCHER_INSTALLED == true ]]; then
+    echo "¡ADVERTENCIA! Esto:"
+    echo "- Requerirá recompilar el launcher"
+    echo "- Eliminará el acceso directo"
+    echo "- No podrás jugar si se elimina"
+    echo ""
+    
+    while true; do
+        read -r -p "¿Deseas desinstalar el Launcher MCPE? (s/n): " sn
+        case $sn in
+            [Ss]* )
+                LAUNCHER_UNINSTALL_CONFIRMED=true
+                break;;
+            [Nn]* )
+                LAUNCHER_UNINSTALL_CONFIRMED=false
+                break;;
+            * ) echo "Por favor responde si (s) o no (n).";;
+        esac
+    done
+else
+    echo "Omitiendo borrado del launcher (no está instalado)"
+    LAUNCHER_UNINSTALL_CONFIRMED=false
+fi
+
+# --- Verificación final ---
+if [[ $TARGET_DIR_UNINSTALL_CONFIRMED == false && \
+      $EXTRACTOR_UNINSTALL_CONFIRMED == false && \
+      $LAUNCHER_UNINSTALL_CONFIRMED == false && \
+      $AUTH_DIR_UNINSTALL_CONFIRMED == false ]]; then
+    echo "Proceso cancelado - Todas las confirmaciones de eliminación fueron canceladas"
+    exit 0
+fi
+
+# --- Confirmación final ---
+print_step 5 6 "Confirmación Final"
+echo ""
+echo "Resumen de acciones a realizar:"
+echo "==========================================="
+echo "Directorio de archivos del juego: $TARGET_DIR_UNINSTALL_CONFIRMED"
+echo "Datos de Autenticación de Xbox: $AUTH_DIR_UNINSTALL_CONFIRMED"
+echo "MCPE Extractor: $EXTRACTOR_UNINSTALL_CONFIRMED"
+echo "MCPE Launcher: $LAUNCHER_UNINSTALL_CONFIRMED"
+echo "==========================================="
+echo ""
+
+while true; do
+    read -r -p "¿Confirmar la desinstalación? (s/n): " sn
+    case $sn in
+        [Ss]* )
+            # --- EJECUCIÓN DE DESINSTALACIÓN ---
+            print_step 6 6 "Eliminando Archivos"
+            echo ""
+
+            # Eliminar directorio de datos del juego
+            if [[ $TARGET_DIR_UNINSTALL_CONFIRMED == true && $TARGET_DIR_EXISTS == true ]]; then
+                rm -rf "$TARGET_DIR"
+                echo "Directorio de juego eliminado: $TARGET_DIR"
+            fi
+
+            # Eliminar directorio de autenticación
+            if [[ $AUTH_DIR_UNINSTALL_CONFIRMED == true && $AUTH_DIR_EXISTS == true ]]; then
+                rm -rf "$AUTH_DIR"
+                echo "Directorio de autenticación eliminado: $AUTH_DIR"
+            fi
+
+            # Eliminar extractor
+            if [[ $EXTRACTOR_UNINSTALL_CONFIRMED == true && $EXTRACTOR_INSTALLED == true ]]; then
+                run_as_root rm -f "$EXTRACTOR_BINARY"
+                echo "Extractor eliminado: $EXTRACTOR_BINARY"
+            fi
+
+            # Eliminar launcher y archivos relacionados
+            if [[ $LAUNCHER_UNINSTALL_CONFIRMED == true && $LAUNCHER_INSTALLED == true ]]; then
+                run_as_root rm -f "$LAUNCHER_BINARY"
+                echo "Launcher eliminado: $LAUNCHER_BINARY"
+                
+                # Eliminar acceso directo
+                if [[ $SHORTCUT_EXISTS == true ]]; then
+                    rm -f "$SHORTCUT_FILE"
+                    echo "Acceso directo eliminado: $SHORTCUT_FILE"
+                fi
+                
+                # Eliminar icono
+                if [[ $SHORTCUT_ICON_EXISTS == true ]]; then
+                    rm -f "$SVG_FILE"
+                    echo "Icono eliminado: $SVG_FILE"
+                fi
+
+                # Limpiar archivos de sistema
+                cleanup_system_files
+            fi
+
+            print_success "Desinstalación completada con éxito"
+            break;;
+
+        [Nn]* )
+            echo "Proceso de desinstalación cancelado"
+            exit 0;;
+
+        * ) 
+            echo "Por favor responde si (s) o no (n).";;
+    esac
+done
+
+echo ""
+echo "==========================================="
+echo "            PROCESO FINALIZADO             "
+echo "==========================================="
+echo ""
+
+exit 0

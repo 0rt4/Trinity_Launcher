@@ -1,0 +1,135 @@
+#include <QApplication>
+#include <QWidget>
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QComboBox>
+#include <QProcess>
+#include <QDir>
+#include <QFileInfo>
+#include <QMessageBox>
+
+class LauncherWindow : public QWidget {
+    Q_OBJECT
+
+public:
+    LauncherWindow(QWidget *parent = nullptr) : QWidget(parent) {
+        setWindowTitle("MCPelauncher - Selector de Versiones");
+        resize(480, 200);
+
+        mainLayout = new QVBoxLayout(this);
+        mainLayout->setContentsMargins(20, 20, 20, 20);
+        mainLayout->setSpacing(15);
+
+        QLabel *titleLabel = new QLabel("Selecciona una versión instalada:");
+        titleLabel->setStyleSheet("QLabel { color: black; font-weight: bold; font-size: 14px; }");
+        mainLayout->addWidget(titleLabel);
+
+        versionComboBox = new QComboBox();
+        versionComboBox->setMinimumHeight(30);
+        mainLayout->addWidget(versionComboBox);
+
+        extractButton = new QPushButton("Extraer nueva versión desde APK");
+        extractButton->setMinimumHeight(35);
+        connect(extractButton, &QPushButton::clicked, this, &LauncherWindow::launchExtractor);
+        mainLayout->addWidget(extractButton);
+
+        playButton = new QPushButton("Jugar");
+        playButton->setEnabled(false);
+        playButton->setMinimumHeight(35);
+        connect(playButton, &QPushButton::clicked, this, &LauncherWindow::launchGame);
+        mainLayout->addWidget(playButton);
+
+        connect(versionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, &LauncherWindow::onVersionSelected);
+
+        loadInstalledVersions();
+    }
+
+private slots:
+    void loadInstalledVersions() {
+        versionComboBox->clear();
+        QString versionsDir = QString("%1/.var/app/com.mcpelauncher.MCPELauncher/data/mcpelauncher/versions")
+                              .arg(QDir::homePath());
+        QDir dir(versionsDir);
+        if (dir.exists()) {
+            QStringList versions = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+            if (!versions.isEmpty()) {
+                versionComboBox->addItems(versions);
+                playButton->setEnabled(true);
+                return;
+            }
+        }
+        versionComboBox->addItem("No hay versiones instaladas");
+        versionComboBox->setEnabled(false);
+        playButton->setEnabled(false);
+    }
+
+    void onVersionSelected(int index) {
+        if (index >= 0 && versionComboBox->itemText(index) != "No hay versiones instaladas") {
+            playButton->setEnabled(true);
+        } else {
+            playButton->setEnabled(false);
+        }
+    }
+
+    void launchExtractor() {
+        QString appDir = QCoreApplication::applicationDirPath();
+        QString extractorPath = appDir + "/extractor";
+
+        if (!QFileInfo::exists(extractorPath) || !QFileInfo(extractorPath).isExecutable()) {
+            QMessageBox::critical(this, "Error",
+                QString("El extractor no se encontró en:\n%1").arg(extractorPath));
+            return;
+        }
+
+        QProcess::startDetached(extractorPath);
+        QApplication::quit();
+    }
+
+    void launchGame() {
+        QString selectedVersion = versionComboBox->currentText();
+        if (selectedVersion == "No hay versiones instaladas") return;
+
+        QString dataDir = QString("%1/.var/app/com.mcpelauncher.MCPELauncher/data/mcpelauncher/versions/%2")
+                          .arg(QDir::homePath())
+                          .arg(selectedVersion);
+
+        QString libPath = dataDir + "/lib/x86_64/libminecraftpe.so";
+        if (!QFileInfo::exists(libPath)) {
+            QMessageBox::warning(this, "Advertencia",
+                QString("Los datos de la versión '%1' están incompletos.\nFalta: %2")
+                .arg(selectedVersion).arg(libPath));
+            return;
+        }
+
+        QString appDir = QCoreApplication::applicationDirPath();
+        QString clientPath = appDir + "/mcpelauncher-client";
+
+        if (!QFileInfo::exists(clientPath) || !QFileInfo(clientPath).isExecutable()) {
+            QMessageBox::critical(this, "Error", "mcpelauncher-client no encontrado.");
+            return;
+        }
+
+        QStringList args;
+        args << "-dg" << dataDir;
+
+        QProcess::startDetached(clientPath, args);
+        QApplication::quit();
+    }
+
+private:
+    QVBoxLayout *mainLayout;
+    QComboBox *versionComboBox;
+    QPushButton *extractButton;
+    QPushButton *playButton;
+};
+
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+    LauncherWindow window;
+    window.show();
+    return app.exec();
+}
+
+#include "trinchete.moc"
